@@ -12,6 +12,8 @@ The pattern is deliberately two steps, not one blocking call:
 ```
 cop start "Add unit tests for src/foo.py" --dir ~/r/myrepo
 # -> prints a job id immediately; the Copilot agent keeps working in its own pane
+# (task can also come from stdin for a quick throwaway job, e.g.
+#  echo "fix the typo in README" | cop start --dir ~/r/myrepo)
 
 # ... do other things, or poll ...
 
@@ -39,7 +41,7 @@ uv sync
 
 ## Commands
 
-- `cop start <task> --dir <path> [--name <mnemonic>]` — opens a new tab in a
+- `cop start [<task>] --dir <path> [--name <mnemonic>]` — opens a new tab in a
   dedicated `cop-tasks` workspace (created on first use; unfocused, so it never
   steals the caller's view), starts a `copilot` agent there, sends the task, and
   returns a job id as soon as the agent confirms it started working (it does **not**

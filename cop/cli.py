@@ -98,8 +98,21 @@ def _emit(data: dict, *, as_json: bool, text: str) -> None:
 
 def cmd_start(args: argparse.Namespace) -> int:
     _require_herdr_env()
+    task = args.task
+    if task is None:
+        if sys.stdin.isatty():
+            print(
+                "error: no task given (pass it as an argument or pipe it via stdin)",
+                file=sys.stderr,
+            )
+            return 2
+        task = sys.stdin.read().strip()
+        if not task:
+            print("error: empty task from stdin", file=sys.stderr)
+            return 2
+
     directory = str(Path(args.dir).expanduser().resolve())
-    job = jobs.new_job(task=args.task, directory=directory, kind="copilot")
+    job = jobs.new_job(task=task, directory=directory, kind="copilot")
     live_names = {a["name"] for a in herdr.agent_list() if a.get("name")}
     job["name"] = _agent_name(args.name or Path(directory).name, job["id"], live_names)
 
@@ -133,7 +146,7 @@ def cmd_start(args: argparse.Namespace) -> int:
             try:
                 herdr.agent_prompt(
                     job["name"],
-                    args.task,
+                    task,
                     wait=True,
                     until=["working"],
                     timeout_ms=15000,
@@ -331,7 +344,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     d = sub.add_parser("start", help="hand a task to a fresh Copilot agent pane")
-    d.add_argument("task", help="the task/prompt to send")
+    d.add_argument(
+        "task",
+        nargs="?",
+        default=None,
+        help="the task/prompt to send (reads stdin if omitted)",
+    )
     d.add_argument(
         "--dir", default=".", help="working directory for the new pane (default: cwd)"
     )
