@@ -1,15 +1,57 @@
-"""Extract the useful part of a `copilot` TUI pane read.
+"""Get a clean answer out of a `copilot` session.
 
-A pane read is a full-screen dump: a startup banner, a nav bar, "Tip"
-boxes, the echoed prompt in its own bordered box, then the actual turn
-(tool calls and the response), then a status bar and an empty input box.
-Only that middle turn is ever wanted -- this strips the rest.
+Copilot writes a full structured JSONL event log per `--session-id` to
+`~/.copilot/session-state/<session-id>/events.jsonl`. The final answer of a
+turn is an `assistant.message` event with `phase: "final_answer"` and a
+plain `content` string -- no banner, no box-drawing, nothing to parse
+around. That's tried first.
+
+Falls back to regex-stripping a raw Herdr pane read (banner, nav bar, tips,
+the echoed prompt in its own box, then the actual turn, then a status bar
+and an empty input box -- only that middle turn is wanted) for when the
+session file is missing, unparseable, or has no final answer yet.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
+
+_SESSION_STATE_DIR = Path.home() / ".copilot" / "session-state"
+
+
+def session_events_path(session_id: str) -> Path:
+    """Path to the full structured event log (JSONL) for a `--session-id`
+    Copilot was started with -- one JSON object per line: session start,
+    model changes, tool calls, messages. Has the whole session, queryable,
+    for anything a single extracted answer can't show."""
+    return _SESSION_STATE_DIR / session_id / "events.jsonl"
+
+
+def extract_final_answer(session_file: Path) -> str | None:
+    """The most recently completed turn's answer, straight from the
+    session's own event log. None if the file is missing, unparseable, or
+    has no final_answer message yet (still working, or blocked mid-turn)."""
+    try:
+        lines = session_file.read_text().splitlines()
+    except OSError:
+        return None
+
+    answer = None
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        data = event.get("data", {})
+        if (
+            event.get("type") == "assistant.message"
+            and data.get("phase") == "final_answer"
+        ):
+            answer = data.get("content")
+    return answer
+
 
 # The echoed-prompt box's bottom border: a line of nothing but box-drawing
 # "▀". The turn content starts right after the *last* one of these, so a
@@ -21,20 +63,10 @@ _PROMPT_BOX_END = re.compile(r"^\s*▀+\s*$", re.MULTILINE)
 # ends right before it.
 _STATUS_BAR = re.compile(r"Session:\s*[\d.]+\s*AIC used")
 
-_SESSION_STATE_DIR = Path.home() / ".copilot" / "session-state"
 
-
-def session_events_path(session_id: str) -> Path:
-    """Path to the full structured event log (JSONL) for a `--session-id`
-    Copilot was started with -- one JSON object per line: session start,
-    model changes, tool calls, messages. The extracted/raw pane read only
-    ever shows the last turn; this has the whole session, queryable, for
-    when that isn't enough."""
-    return _SESSION_STATE_DIR / session_id / "events.jsonl"
-
-
-def extract_answer(raw: str) -> str:
-    """Return just the last turn's content, or `raw` unchanged if the
+def extract_answer_from_pane(raw: str) -> str:
+    """Fallback for when the session file isn't usable: return just the
+    last turn's content from a raw pane read, or `raw` unchanged if the
     expected markers aren't found (e.g. a startup dialog, a non-copilot
     agent, or a Copilot UI change)."""
     prompt_ends = list(_PROMPT_BOX_END.finditer(raw))

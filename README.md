@@ -104,18 +104,21 @@ accepting input.
 
 ## Result extraction and the full session log
 
-A raw pane read is a full-screen dump — startup banner, nav bar, tips, the echoed
-prompt in its own box, the actual turn, then a status bar and an empty input box.
-`collect`/`respond` strip all of that down to just the last turn (tool-call traces
-kept, chrome dropped) by default; pass `--raw` to get the untouched dump instead.
+`start` gives each job its own `--session-id`. Copilot writes a full structured event
+log for it to `~/.copilot/session-state/<session-id>/events.jsonl` (one JSON object
+per line: `session.start`, `user.message`, `model.response`, tool calls, ...) — shown
+as `session_file` in every job. By default, `collect`/`respond` read the answer
+straight from there: the last `assistant.message` event with `phase: "final_answer"`
+has a plain `content` string, no chrome to parse around.
 
-`start` also gives each job its own `--session-id`, and shows where that session's
-**full structured event log** lives:
-`~/.copilot/session-state/<session-id>/events.jsonl` — one JSON object per line
-(`session.start`, `user.message`, `model.response`, `assistant.message`, tool calls,
-...). The extracted (or even raw) pane read only ever shows what's currently on
-screen; this has the entire session, queryable, for anything that needs more than the
-final turn.
+If the session file is missing, unparseable, or has no final answer yet (e.g. blocked
+mid-turn), they fall back to scraping the pane — a full-screen dump (startup banner,
+nav bar, tips, the echoed prompt in its own box, the turn, a status bar, an empty
+input box) stripped down to just the last turn's content. Pass `--raw` to get that
+raw pane dump directly, bypassing both.
+
+`session_file` itself is worth keeping around regardless — it's the entire session,
+queryable, for anything a single extracted answer can't show.
 
 ## Development
 

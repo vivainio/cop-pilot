@@ -1,4 +1,5 @@
 import argparse
+import json
 from datetime import datetime, timedelta, timezone
 from typing import NoReturn
 
@@ -149,3 +150,48 @@ def test_collect_skips_refetch_once_result_is_stored(monkeypatch) -> None:
 
     assert rc == 0
     assert jobs.load(job["id"])["result"] == "already have this"
+
+
+def test_collect_prefers_session_file_over_pane_scrape(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("HERDR_ENV", "1")
+    session_file = tmp_path / "events.jsonl"
+    session_file.write_text(
+        json.dumps(
+            {
+                "type": "assistant.message",
+                "data": {
+                    "phase": "final_answer",
+                    "content": "clean answer from session file",
+                },
+            }
+        )
+        + "\n"
+    )
+    job = jobs.new_job(task="t", directory="/r", kind="copilot")
+    job["session_file"] = str(session_file)
+    jobs.save(job)
+
+    monkeypatch.setattr(
+        herdr, "agent_wait", lambda *a, **k: {"agent": {"agent_status": "done"}}
+    )
+
+    def _boom(*a, **k) -> NoReturn:
+        raise AssertionError(
+            "should not scrape the pane when the session file resolves"
+        )
+
+    monkeypatch.setattr(herdr, "agent_read", _boom)
+
+    args = argparse.Namespace(
+        job_id=job["id"],
+        wait=True,
+        timeout=None,
+        lines=400,
+        refresh=False,
+        raw=False,
+        json=False,
+    )
+    rc = cmd_collect(args)
+
+    assert rc == 0
+    assert jobs.load(job["id"])["result"] == "clean answer from session file"

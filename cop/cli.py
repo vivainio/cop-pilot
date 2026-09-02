@@ -90,9 +90,19 @@ def _agent_status(state: dict) -> str:
     return state.get("agent", state).get("agent_status", "unknown")
 
 
-def _read_result(target: str, *, lines: int, raw: bool) -> str:
-    text = herdr.agent_read(target, lines=lines)
-    return text if raw else copilot_output.extract_answer(text)
+def _read_result(job: dict, target: str, *, lines: int, raw: bool) -> str:
+    if raw:
+        return herdr.agent_read(target, lines=lines)
+    session_file = job.get("session_file")
+    if session_file:
+        answer = copilot_output.extract_final_answer(Path(session_file))
+        if answer is not None:
+            return answer
+    # Session file missing/unparseable/no final answer yet (e.g. blocked
+    # mid-turn) -- fall back to scraping the pane.
+    return copilot_output.extract_answer_from_pane(
+        herdr.agent_read(target, lines=lines)
+    )
 
 
 def _emit(data: dict, *, as_json: bool, text: str) -> None:
@@ -229,10 +239,10 @@ def cmd_collect(args: argparse.Namespace) -> int:
 
     if agent_status in _SETTLED:
         job["status"] = "done"
-        job["result"] = _read_result(target, lines=args.lines, raw=args.raw)
+        job["result"] = _read_result(job, target, lines=args.lines, raw=args.raw)
     elif agent_status == "blocked":
         job["status"] = "blocked"
-        job["result"] = _read_result(target, lines=args.lines, raw=args.raw)
+        job["result"] = _read_result(job, target, lines=args.lines, raw=args.raw)
     else:
         job["status"] = agent_status  # "working" or "unknown"
 
@@ -270,7 +280,7 @@ def cmd_respond(args: argparse.Namespace) -> int:
     agent_status = _agent_status(state)
     job["status"] = "done" if agent_status in _SETTLED else agent_status
     if job["status"] in ("done", "blocked"):
-        job["result"] = _read_result(target, lines=args.lines, raw=args.raw)
+        job["result"] = _read_result(job, target, lines=args.lines, raw=args.raw)
     jobs.save(job)
     _emit(job, as_json=args.json, text=_format_job(job))
     return 0
