@@ -472,12 +472,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     isk = sub.add_parser(
         "install-skills",
-        help="install the bundled Claude Code skill to ~/.claude/skills/",
+        help="install the bundled Claude Code skill to $CLAUDE_CONFIG_DIR/skills/ (default: ~/.claude/skills/)",
     )
     isk.add_argument(
         "--skills-dir",
         default=None,
-        help="target directory for the skill (default: ~/.claude/skills/)",
+        help="target directory for the skill (default: $CLAUDE_CONFIG_DIR/skills/ or ~/.claude/skills/)",
     )
     isk.set_defaults(func=install_skills_command)
 

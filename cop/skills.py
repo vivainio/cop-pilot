@@ -13,12 +13,18 @@ from pathlib import Path
 STALE_CHECK_MARKER = (
     Path(os.environ.get("COP_HOME") or Path.home() / ".cop") / "skill-check.txt"
 )
-INSTALLED_SKILL_MD = Path.home() / ".claude" / "skills" / "cop" / "SKILL.md"
+
+
+def _claude_config_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+
+
+INSTALLED_SKILL_MD = _claude_config_dir() / "skills" / "cop" / "SKILL.md"
 
 
 def install_skills_command(args: argparse.Namespace) -> int:
     skills_dir = (
-        Path(args.skills_dir) if args.skills_dir else Path.home() / ".claude" / "skills"
+        Path(args.skills_dir) if args.skills_dir else _claude_config_dir() / "skills"
     )
     src = files("cop") / "skills" / "cop"
     dest = skills_dir / "cop"
