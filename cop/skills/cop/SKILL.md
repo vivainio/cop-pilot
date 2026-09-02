@@ -25,8 +25,11 @@ Other commands: `cop respond <job-id> "<text>"` (answer a prompt that left a job
 
 ## Gotchas
 
-- `start` never blocks on the task finishing — always follow with `cop collect
-  <job-id> --wait`.
+- `start` never blocks on the task finishing. Don't run `cop collect <job-id> --wait`
+  as a normal blocking tool call either — the Copilot agent can take a while, and that
+  ties up your own turn for the whole duration. Run it the way you'd wait on any other
+  long shell command: in the background (or polled), so you're notified when it
+  settles instead of blocking on it.
 - `blocked` status means the agent is waiting on an in-pane prompt; unblock with
   `cop respond <job-id> "<answer>"`, then `collect` again.
 - A long response can get truncated by the pane read — if so, ask the task (via
