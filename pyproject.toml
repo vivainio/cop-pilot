@@ -1,0 +1,54 @@
+[project]
+name = "cop"
+version = "0.1.0"
+description = "Delegate coding tasks to GitHub Copilot CLI agents via Herdr, and collect results asynchronously."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+keywords = ["herdr", "copilot", "cli", "agents", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.scripts]
+cop = "cop.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ty",
+]
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+packages = ["cop"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ty.src]
+include = ["cop", "tests"]
+
+[tool.ruff.lint]
+extend-select = ["ANN"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN001", "ANN002", "ANN003", "ANN204", "ANN205", "ANN206", "ANN401"]
