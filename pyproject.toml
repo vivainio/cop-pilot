@@ -1,5 +1,5 @@
 [project]
-name = "cop"
+name = "cop-pilot"
 version = "0.1.0"
 description = "Delegate coding tasks to GitHub Copilot CLI agents via Herdr, and collect results asynchronously."
 readme = "README.md"
