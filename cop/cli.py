@@ -23,6 +23,7 @@ import re
 import sys
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import copilot_trust, herdr, jobs
@@ -287,17 +288,49 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _humanize_age(iso_ts: str) -> str:
+    try:
+        then = datetime.fromisoformat(iso_ts)
+    except ValueError:
+        return iso_ts
+    seconds = max(0, int((datetime.now(timezone.utc) - then).total_seconds()))
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    if days < 30:
+        return f"{days}d ago"
+    months = days // 30
+    if months < 12:
+        return f"{months}mo ago"
+    return f"{days // 365}y ago"
+
+
+def _result_size(job: dict) -> str:
+    result = job.get("result")
+    if not result:
+        return "-"
+    return f"{len(result) / 1024:.1f}kb"
+
+
 def _print_job_table(all_jobs: list[dict]) -> None:
     if not all_jobs:
         print('no jobs yet -- run `cop start "<task>" --dir <path>`')
         return
-    print(f"{'id':<10}{'status':<10}{'kind':<10}{'created':<26}task")
+    print(f"{'id':<10}{'status':<10}{'kind':<10}{'created':<12}{'size':<8}task")
     for job in all_jobs:
         task = job["task"].replace("\n", " ")
         if len(task) > 60:
             task = task[:57] + "..."
+        age = _humanize_age(job["created_at"])
+        size = _result_size(job)
         print(
-            f"{job['id']:<10}{job['status']:<10}{job['kind']:<10}{job['created_at']:<26}{task}"
+            f"{job['id']:<10}{job['status']:<10}{job['kind']:<10}{age:<12}{size:<8}{task}"
         )
 
 

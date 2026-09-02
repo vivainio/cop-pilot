@@ -1,8 +1,9 @@
 import argparse
+from datetime import datetime, timedelta, timezone
 from typing import NoReturn
 
 from cop import herdr, jobs
-from cop.cli import _agent_name, _agent_status, cmd_collect
+from cop.cli import _agent_name, _agent_status, _humanize_age, _result_size, cmd_collect
 
 
 def test_agent_name_uses_hint_when_available() -> None:
@@ -48,6 +49,48 @@ def test_agent_status_reads_nested_agent_field() -> None:
 
 def test_agent_status_defaults_to_unknown() -> None:
     assert _agent_status({}) == "unknown"
+
+
+def _ago(**kwargs) -> str:
+    return (datetime.now(timezone.utc) - timedelta(**kwargs)).isoformat(
+        timespec="seconds"
+    )
+
+
+def test_humanize_age_just_now() -> None:
+    assert _humanize_age(_ago(seconds=5)) == "just now"
+
+
+def test_humanize_age_minutes() -> None:
+    assert _humanize_age(_ago(minutes=5)) == "5m ago"
+
+
+def test_humanize_age_hours() -> None:
+    assert _humanize_age(_ago(hours=3)) == "3h ago"
+
+
+def test_humanize_age_days() -> None:
+    assert _humanize_age(_ago(days=2)) == "2d ago"
+
+
+def test_humanize_age_months() -> None:
+    assert _humanize_age(_ago(days=90)) == "3mo ago"
+
+
+def test_humanize_age_years() -> None:
+    assert _humanize_age(_ago(days=800)) == "2y ago"
+
+
+def test_humanize_age_falls_back_on_bad_input() -> None:
+    assert _humanize_age("not a timestamp") == "not a timestamp"
+
+
+def test_result_size_missing_is_dash() -> None:
+    assert _result_size({"result": None}) == "-"
+
+
+def test_result_size_formats_kb() -> None:
+    assert _result_size({"result": "a" * 2048}) == "2.0kb"
 
 
 def test_collect_fetches_result_even_if_status_already_marked_done(monkeypatch) -> None:
