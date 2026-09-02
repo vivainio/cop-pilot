@@ -30,7 +30,19 @@ cop collect <job-id> --wait
 ## Install
 
 ```
-uv tool install git+https://github.com/<you>/cop
+uv tool install cop-pilot
+```
+
+or with `pip`:
+
+```
+pip install cop-pilot
+```
+
+Straight from GitHub:
+
+```
+uv tool install git+https://github.com/vivainio/cop-pilot
 ```
 
 For local development:

@@ -1,6 +1,6 @@
 [project]
 name = "cop-pilot"
-version = "0.1.0"
+version = "0.0.0.dev0"
 description = "Delegate coding tasks to GitHub Copilot CLI agents via Herdr, and collect results asynchronously."
 readme = "README.md"
 license = "MIT"
@@ -20,6 +20,11 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/vivainio/cop-pilot"
+Repository = "https://github.com/vivainio/cop-pilot"
+Issues = "https://github.com/vivainio/cop-pilot/issues"
 
 [project.scripts]
 cop = "cop.cli:main"
