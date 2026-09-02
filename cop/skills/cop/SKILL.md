@@ -12,6 +12,15 @@ result later instead of blocking. Requires running inside a Herdr-managed pane
 full flags; `--json` works on every command. Full docs:
 https://github.com/vivainio/cop-pilot
 
+## When invoked as `/cop <task>`
+
+The arguments ARE the task to delegate — don't answer them yourself. Run
+`cop start "<arguments>" --dir <target repo> --name <short-mnemonic-slug>` (default
+`--dir` to the current working directory's repo unless the user names another; pick
+`--name` from the task itself, e.g. "add-foo-tests") and report the job id back.
+The mnemonic makes the job easy to spot later in `herdr agent list` instead of just
+the directory name.
+
 ```bash
 cop start "Add unit tests for src/foo.py" --dir ~/r/myrepo
 # -> prints a job id immediately; the agent keeps working in its own pane
@@ -22,6 +31,13 @@ cop collect <job-id> --wait
 
 Other commands: `cop respond <job-id> "<text>"` (answer a prompt that left a job
 `blocked`), `cop show <job-id>`, `cop list`, `cop status`.
+
+Pass `--worktree` to `start` when the target repo already has other work sitting in it
+(uncommitted changes, another agent running there) — it runs the task in a fresh git
+worktree (via `herdr worktree create`) instead of `--dir` directly, so the agent can't
+collide with that other work. It shows up as its own workspace in herdr and its own
+branch named after the agent; remove it later with `herdr worktree remove` (the user
+can also do this from the herdr UI).
 
 ## Gotchas
 

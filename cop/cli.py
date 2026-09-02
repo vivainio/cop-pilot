@@ -132,16 +132,39 @@ def cmd_start(args: argparse.Namespace) -> int:
     job = jobs.new_job(task=task, directory=directory, kind="copilot")
     live_names = {a["name"] for a in herdr.agent_list() if a.get("name")}
     job["name"] = _agent_name(args.name or Path(directory).name, job["id"], live_names)
+    job["worktree_path"] = None
 
     try:
-        workspace_id = _ensure_workspace(directory)
-        tab = herdr.tab_create(
-            workspace_id=workspace_id, cwd=directory, label=job["name"], no_focus=True
-        )
-        pane_id = tab["root_pane"]["pane_id"]
-        job["workspace_id"] = workspace_id
-        job["tab_id"] = tab["tab"]["tab_id"]
-        job["pane_id"] = pane_id
+        if args.worktree:
+            # Own git worktree + its own herdr workspace, branched off
+            # `directory`'s repo, so the agent can't collide with other work
+            # already sitting in that checkout. `worktree create` returns a
+            # ready-made pane, unlike the shared-workspace path below.
+            created = herdr.worktree_create(
+                cwd=directory,
+                branch=f"worktrees/{job['name']}",
+                label=job["name"],
+                no_focus=True,
+            )
+            work_dir = created["worktree"]["path"]
+            job["worktree_path"] = work_dir
+            job["workspace_id"] = created["workspace"]["workspace_id"]
+            job["tab_id"] = created["tab"]["tab_id"]
+            pane_id = created["root_pane"]["pane_id"]
+            job["pane_id"] = pane_id
+        else:
+            work_dir = directory
+            workspace_id = _ensure_workspace(directory)
+            tab = herdr.tab_create(
+                workspace_id=workspace_id,
+                cwd=directory,
+                label=job["name"],
+                no_focus=True,
+            )
+            pane_id = tab["root_pane"]["pane_id"]
+            job["workspace_id"] = workspace_id
+            job["tab_id"] = tab["tab"]["tab_id"]
+            job["pane_id"] = pane_id
         jobs.save(job)
 
         # Pre-trust the repo so copilot's startup folder-trust dialog never
@@ -149,7 +172,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         # "restore interrupted sessions" picker either -- herdr can't tell
         # either of those modals apart from a settled, ready-for-input
         # screen, so a prompt sent into one silently goes nowhere.
-        copilot_trust.trust(directory)
+        copilot_trust.trust(work_dir)
         session_id = str(uuid.uuid4())
         job["session_id"] = session_id
         job["session_file"] = str(copilot_output.session_events_path(session_id))
@@ -188,12 +211,17 @@ def cmd_start(args: argparse.Namespace) -> int:
         )
         return 1
 
+    dir_line = (
+        f"worktree: {job['worktree_path']}  (off {job['dir']})\n"
+        if job.get("worktree_path")
+        else f"dir:  {job['dir']}\n"
+    )
     _emit(
         job,
         as_json=args.json,
         text=(
             f"started  job={job['id']}  agent={job['name']}  pane={job['pane_id']}\n"
-            f"dir:  {job['dir']}\n"
+            f"{dir_line}"
             f"task: {job['task']}\n"
             f"-> cop collect {job['id']} --wait"
         ),
@@ -385,8 +413,10 @@ def _format_job(job: dict) -> str:
         f"status: {job['status']}",
         f"agent:  {job['name']}  pane={job.get('pane_id')} workspace={job.get('workspace_id')}",
         f"dir:    {job['dir']}",
-        f"task:   {job['task']}",
     ]
+    if job.get("worktree_path"):
+        lines.append(f"worktree: {job['worktree_path']}")
+    lines.append(f"task:   {job['task']}")
     if job.get("session_file"):
         lines.append(f"session: {job['session_file']}  (full structured event log)")
     if job.get("error"):
@@ -417,6 +447,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="mnemonic for the agent name (default: the directory name) -- "
         "makes it easier to spot in `herdr agent list`; the job id is only appended if that "
         "plain name is already in use",
+    )
+    d.add_argument(
+        "--worktree",
+        action="store_true",
+        help="run in a fresh git worktree branched off --dir (via `herdr worktree "
+        "create`) instead of --dir directly, so the agent can't collide with other "
+        "work already sitting in that checkout; shows up as its own workspace in "
+        "herdr and its own branch named after the agent -- remove it later with "
+        "`herdr worktree remove`",
     )
     d.add_argument("--json", action="store_true")
     d.set_defaults(func=cmd_start)
