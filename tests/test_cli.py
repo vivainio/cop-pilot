@@ -109,7 +109,13 @@ def test_collect_fetches_result_even_if_status_already_marked_done(monkeypatch) 
     monkeypatch.setattr(herdr, "agent_read", lambda *a, **k: "the answer")
 
     args = argparse.Namespace(
-        job_id=job["id"], wait=True, timeout=None, lines=400, refresh=False, json=False
+        job_id=job["id"],
+        wait=True,
+        timeout=None,
+        lines=400,
+        refresh=False,
+        raw=False,
+        json=False,
     )
     rc = cmd_collect(args)
 
@@ -131,7 +137,13 @@ def test_collect_skips_refetch_once_result_is_stored(monkeypatch) -> None:
     monkeypatch.setattr(herdr, "agent_get", _boom)
 
     args = argparse.Namespace(
-        job_id=job["id"], wait=True, timeout=None, lines=400, refresh=False, json=False
+        job_id=job["id"],
+        wait=True,
+        timeout=None,
+        lines=400,
+        refresh=False,
+        raw=False,
+        json=False,
     )
     rc = cmd_collect(args)
 

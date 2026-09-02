@@ -26,7 +26,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import copilot_trust, herdr, jobs
+from . import copilot_output, copilot_trust, herdr, jobs
 
 # Herdr agent lifecycle states -> job status. "unknown" and "working" pass through as-is.
 _SETTLED = {"idle", "done"}
@@ -90,6 +90,11 @@ def _agent_status(state: dict) -> str:
     return state.get("agent", state).get("agent_status", "unknown")
 
 
+def _read_result(target: str, *, lines: int, raw: bool) -> str:
+    text = herdr.agent_read(target, lines=lines)
+    return text if raw else copilot_output.extract_answer(text)
+
+
 def _emit(data: dict, *, as_json: bool, text: str) -> None:
     if as_json:
         print(json.dumps(data, indent=2))
@@ -136,6 +141,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         copilot_trust.trust(directory)
         session_id = str(uuid.uuid4())
         job["session_id"] = session_id
+        job["session_file"] = str(copilot_output.session_events_path(session_id))
         extra_args = ["--session-id", session_id, *_COPILOT_AUTO_ARGS]
         herdr.agent_start(job["name"], "copilot", pane_id, extra_args=extra_args)
         # Confirm the prompt actually landed (agent transitioned to "working")
@@ -223,10 +229,10 @@ def cmd_collect(args: argparse.Namespace) -> int:
 
     if agent_status in _SETTLED:
         job["status"] = "done"
-        job["result"] = herdr.agent_read(target, lines=args.lines)
+        job["result"] = _read_result(target, lines=args.lines, raw=args.raw)
     elif agent_status == "blocked":
         job["status"] = "blocked"
-        job["result"] = herdr.agent_read(target, lines=args.lines)
+        job["result"] = _read_result(target, lines=args.lines, raw=args.raw)
     else:
         job["status"] = agent_status  # "working" or "unknown"
 
@@ -264,7 +270,7 @@ def cmd_respond(args: argparse.Namespace) -> int:
     agent_status = _agent_status(state)
     job["status"] = "done" if agent_status in _SETTLED else agent_status
     if job["status"] in ("done", "blocked"):
-        job["result"] = herdr.agent_read(target, lines=args.lines)
+        job["result"] = _read_result(target, lines=args.lines, raw=args.raw)
     jobs.save(job)
     _emit(job, as_json=args.json, text=_format_job(job))
     return 0
@@ -370,6 +376,8 @@ def _format_job(job: dict) -> str:
         f"dir:    {job['dir']}",
         f"task:   {job['task']}",
     ]
+    if job.get("session_file"):
+        lines.append(f"session: {job['session_file']}  (full structured event log)")
     if job.get("error"):
         lines.append(f"error:  {job['error']}")
     if job.get("result") is not None:
@@ -410,6 +418,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument(
         "--refresh", action="store_true", help="re-check even if already done/error"
     )
+    c.add_argument(
+        "--raw",
+        action="store_true",
+        help="store the full pane dump instead of just the extracted turn "
+        "(banner/nav/echoed-prompt/status-bar stripped by default)",
+    )
     c.add_argument("--json", action="store_true")
     c.set_defaults(func=cmd_collect)
 
@@ -421,6 +435,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--wait", action="store_true")
     r.add_argument("--timeout", type=int, default=None)
     r.add_argument("--lines", type=int, default=400)
+    r.add_argument(
+        "--raw", action="store_true", help="store the full pane dump, unextracted"
+    )
     r.add_argument("--json", action="store_true")
     r.set_defaults(func=cmd_respond)
 

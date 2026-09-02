@@ -55,11 +55,13 @@ uv sync
   are flat (no parent/child relationship, confirmed via `herdr api schema`), so this
   can't be nested "under" the caller's own workspace the way a git worktree nests
   under its parent repo — a separate workspace is the closest available primitive.
-- `cop collect <job-id> [--wait] [--timeout MS]` — without `--wait`, does a
+- `cop collect <job-id> [--wait] [--timeout MS] [--raw]` — without `--wait`, does a
   non-blocking status check; with `--wait`, blocks until the agent reaches `idle`,
-  `done`, or `blocked`, then reads back its terminal output as the result.
-- `cop respond <job-id> "<text>"` — send a follow-up into a job's agent, e.g. to
-  answer a permission/approval dialog that left it `blocked`.
+  `done`, or `blocked`, then reads back its terminal output as the result. By default
+  the pane read is stripped down to just the last turn (see below); pass `--raw` for
+  the full dump.
+- `cop respond <job-id> "<text>" [--raw]` — send a follow-up into a job's agent, e.g.
+  to answer a permission/approval dialog that left it `blocked`.
 - `cop show <job-id> [--refresh]` — full detail for one job.
 - `cop list` — table of all known jobs, cached status (no herdr calls, works offline).
 - `cop status` — table of all known jobs, refreshing every non-terminal job's live
@@ -99,6 +101,21 @@ all three:
 `working`, retrying a couple of times on `agent_prompt_stalled`) instead of firing
 blind — `agent_start` reporting ready can race a beat ahead of the TUI actually
 accepting input.
+
+## Result extraction and the full session log
+
+A raw pane read is a full-screen dump — startup banner, nav bar, tips, the echoed
+prompt in its own box, the actual turn, then a status bar and an empty input box.
+`collect`/`respond` strip all of that down to just the last turn (tool-call traces
+kept, chrome dropped) by default; pass `--raw` to get the untouched dump instead.
+
+`start` also gives each job its own `--session-id`, and shows where that session's
+**full structured event log** lives:
+`~/.copilot/session-state/<session-id>/events.jsonl` — one JSON object per line
+(`session.start`, `user.message`, `model.response`, `assistant.message`, tool calls,
+...). The extracted (or even raw) pane read only ever shows what's currently on
+screen; this has the entire session, queryable, for anything that needs more than the
+final turn.
 
 ## Development
 
