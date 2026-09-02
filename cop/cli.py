@@ -191,7 +191,13 @@ def cmd_collect(args: argparse.Namespace) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
 
-    if job["status"] in ("done", "error") and not args.refresh:
+    # "done" can also have been set by `status`/`show --refresh`, which only
+    # check lifecycle state and never fetch the result -- only treat it as
+    # already-collected if we actually have a result stored.
+    already_collected = job["status"] == "error" or (
+        job["status"] == "done" and job.get("result") is not None
+    )
+    if already_collected and not args.refresh:
         _emit(job, as_json=args.json, text=_format_job(job))
         return 0 if job["status"] == "done" else 1
 

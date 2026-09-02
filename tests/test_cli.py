@@ -1,4 +1,8 @@
-from cop.cli import _agent_name, _agent_status
+import argparse
+from typing import NoReturn
+
+from cop import herdr, jobs
+from cop.cli import _agent_name, _agent_status, cmd_collect
 
 
 def test_agent_name_uses_hint_when_available() -> None:
@@ -44,3 +48,49 @@ def test_agent_status_reads_nested_agent_field() -> None:
 
 def test_agent_status_defaults_to_unknown() -> None:
     assert _agent_status({}) == "unknown"
+
+
+def test_collect_fetches_result_even_if_status_already_marked_done(monkeypatch) -> None:
+    """`status`/`show --refresh` can mark a job "done" from lifecycle alone,
+    without ever fetching a result. `collect` must not mistake that for
+    already-collected and skip the fetch.
+    """
+    monkeypatch.setenv("HERDR_ENV", "1")
+    job = jobs.new_job(task="t", directory="/r", kind="copilot")
+    job["status"] = "done"
+    jobs.save(job)
+
+    monkeypatch.setattr(
+        herdr, "agent_wait", lambda *a, **k: {"agent": {"agent_status": "done"}}
+    )
+    monkeypatch.setattr(herdr, "agent_read", lambda *a, **k: "the answer")
+
+    args = argparse.Namespace(
+        job_id=job["id"], wait=True, timeout=None, lines=400, refresh=False, json=False
+    )
+    rc = cmd_collect(args)
+
+    assert rc == 0
+    assert jobs.load(job["id"])["result"] == "the answer"
+
+
+def test_collect_skips_refetch_once_result_is_stored(monkeypatch) -> None:
+    monkeypatch.setenv("HERDR_ENV", "1")
+    job = jobs.new_job(task="t", directory="/r", kind="copilot")
+    job["status"] = "done"
+    job["result"] = "already have this"
+    jobs.save(job)
+
+    def _boom(*a, **k) -> NoReturn:
+        raise AssertionError("should not call herdr when result is already stored")
+
+    monkeypatch.setattr(herdr, "agent_wait", _boom)
+    monkeypatch.setattr(herdr, "agent_get", _boom)
+
+    args = argparse.Namespace(
+        job_id=job["id"], wait=True, timeout=None, lines=400, refresh=False, json=False
+    )
+    rc = cmd_collect(args)
+
+    assert rc == 0
+    assert jobs.load(job["id"])["result"] == "already have this"
