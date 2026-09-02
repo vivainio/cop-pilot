@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import copilot_output, copilot_trust, herdr, jobs
+from .skills import check_skill_staleness, install_skills_command
 
 # Herdr agent lifecycle states -> job status. "unknown" and "working" pass through as-is.
 _SETTLED = {"idle", "done"}
@@ -469,12 +470,25 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--json", action="store_true")
     st.set_defaults(func=cmd_status)
 
+    isk = sub.add_parser(
+        "install-skills",
+        help="install the bundled Claude Code skill to ~/.claude/skills/",
+    )
+    isk.add_argument(
+        "--skills-dir",
+        default=None,
+        help="target directory for the skill (default: ~/.claude/skills/)",
+    )
+    isk.set_defaults(func=install_skills_command)
+
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command != "install-skills":
+        check_skill_staleness()
     return args.func(args)
 
 

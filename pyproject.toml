@@ -46,6 +46,9 @@ package = true
 [tool.setuptools]
 packages = ["cop"]
 
+[tool.setuptools.package-data]
+cop = ["skills/cop/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

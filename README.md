@@ -84,6 +84,18 @@ is the caller).
 
 Jobs are flat JSON files under `~/.cop/jobs` (override with `COP_HOME`).
 
+## Claude Code Agent Skill
+
+A skill describing `cop`'s commands is bundled with the package, for AI coding
+assistants that should delegate tasks to Copilot directly.
+
+Install it with:
+
+```
+cop install-skills                       # installs to ~/.claude/skills/
+cop install-skills --skills-dir ./skills # custom target directory
+```
+
 ## Why `start` always does three things
 
 Herdr's agent-lifecycle detection reports a Copilot pane as `idle`/ready-for-input
