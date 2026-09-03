@@ -65,6 +65,26 @@ cop install-skills                       # installs to ~/.claude/skills/
 cop install-skills --skills-dir ./skills # custom target
 ```
 
+With the skill installed, Claude Code drives `cop` itself when you delegate:
+
+> **/cop** check this pre-commit hook script, does it need updating for the
+> new CI runner: https://issues.example.com/browse/PROJ-1234
+>
+> Claude reworks the short ask into a self-contained task before handing it
+> off — the delegate has no memory of this conversation:
+>
+> ```
+> cop start "Review the repo's pre-commit hook script(s) against
+> https://issues.example.com/browse/PROJ-1234 (CI runner is being upgraded).
+> Determine whether the hook needs changes to keep working there, and if so
+> propose the fix." --dir ~/r/myrepo
+> ```
+>
+> Delegated. Job started: `504ce49b` (agent `cop-check-hook`, pane `w8K:p6`)
+> in `~/r/myrepo`.
+>
+> Collecting in the background.
+
 ## Development
 
 ```
