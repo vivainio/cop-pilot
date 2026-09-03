@@ -60,14 +60,24 @@ def workspace_create(*, label: str, cwd: str, no_focus: bool = True) -> dict:
 
 
 def worktree_create(
-    *, cwd: str, branch: str, label: str, no_focus: bool = True
+    *,
+    cwd: str,
+    branch: str,
+    label: str,
+    base: str | None = None,
+    no_focus: bool = True,
 ) -> dict:
     """Create a Git worktree checkout (its own herdr workspace/tab/pane) off
-    `cwd`'s repo. Returns the full `worktree_created` payload -- callers
-    want `result["worktree"]["path"]` for the checkout dir and
-    `result["root_pane"]["pane_id"]` for where to start the agent.
+    `cwd`'s repo. `base`, if given, is the ref the new `branch` starts from
+    (herdr's own default is otherwise whatever `git worktree add` defaults
+    to for `cwd`, typically its current HEAD). Returns the full
+    `worktree_created` payload -- callers want `result["worktree"]["path"]`
+    for the checkout dir and `result["root_pane"]["pane_id"]` for where to
+    start the agent.
     """
     args = ["worktree", "create", "--cwd", cwd, "--branch", branch, "--label", label]
+    if base:
+        args += ["--base", base]
     args.append("--no-focus" if no_focus else "--focus")
     return run(args)
 

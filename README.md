@@ -52,7 +52,9 @@ command in an interactive `copilot` session). Every job gets its own herdr
 workspace, labeled with its agent name so it's identifiable in the
 workspace list. Add `--worktree` to also run it in a fresh git worktree
 (branch `worktrees/<name>`) instead of `--dir` directly, so it can't
-collide with other work already in that checkout.
+collide with other work already in that checkout. `--branch <ref>` (only
+with `--worktree`) picks what that new branch starts from, instead of
+`--dir`'s current HEAD.
 
 `cop collect <job-id> [--wait] [--timeout MS] [--raw]` — without `--wait`,
 non-blocking status check. `--raw` dumps the full pane instead of just the

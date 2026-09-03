@@ -127,6 +127,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                 cwd=directory,
                 branch=f"worktrees/{job['name']}",
                 label=job["name"],
+                base=args.branch,
                 no_focus=True,
             )
             work_dir = created["worktree"]["path"]
@@ -448,6 +449,14 @@ def build_parser() -> argparse.ArgumentParser:
         "work already sitting in that checkout; shows up as its own workspace in "
         "herdr and its own branch named after the agent -- remove it later with "
         "`herdr worktree remove`",
+    )
+    d.add_argument(
+        "--branch",
+        default=None,
+        help="with --worktree, the ref the new worktree's branch starts from "
+        "(passed as `herdr worktree create --base`); default is that command's "
+        "own default (typically --dir's current HEAD). Ignored without "
+        "--worktree",
     )
     d.add_argument("--json", action="store_true")
     d.set_defaults(func=cmd_start)
