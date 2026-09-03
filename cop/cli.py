@@ -69,23 +69,6 @@ def _require_herdr_env() -> None:
         sys.exit(1)
 
 
-# All delegated jobs live in one dedicated workspace (one tab per job) so
-# they don't clutter whatever workspace/tab the caller is currently in.
-# Herdr workspaces are flat/top-level (no parent-child relationship, per
-# `herdr api schema`), so this can't be nested "under" the caller's own
-# workspace the way a git worktree nests under its parent repo -- a
-# separate workspace is the closest available primitive.
-_WORKSPACE_LABEL = "cop-tasks"
-
-
-def _ensure_workspace(cwd: str) -> str:
-    for ws in herdr.workspace_list():
-        if ws.get("label") == _WORKSPACE_LABEL:
-            return ws["workspace_id"]
-    created = herdr.workspace_create(label=_WORKSPACE_LABEL, cwd=cwd, no_focus=True)
-    return created["workspace"]["workspace_id"]
-
-
 def _agent_status(state: dict) -> str:
     """herdr agent get/wait/prompt all nest the live fields under "agent"."""
     return state.get("agent", state).get("agent_status", "unknown")
@@ -153,17 +136,17 @@ def cmd_start(args: argparse.Namespace) -> int:
             pane_id = created["root_pane"]["pane_id"]
             job["pane_id"] = pane_id
         else:
+            # Own herdr workspace per job, labeled with the agent's slug --
+            # so it reads as one distinct entry in the workspace list
+            # instead of an anonymous tab buried under a generic shared
+            # workspace label.
             work_dir = directory
-            workspace_id = _ensure_workspace(directory)
-            tab = herdr.tab_create(
-                workspace_id=workspace_id,
-                cwd=directory,
-                label=job["name"],
-                no_focus=True,
+            created = herdr.workspace_create(
+                label=job["name"], cwd=directory, no_focus=True
             )
-            pane_id = tab["root_pane"]["pane_id"]
-            job["workspace_id"] = workspace_id
-            job["tab_id"] = tab["tab"]["tab_id"]
+            job["workspace_id"] = created["workspace"]["workspace_id"]
+            job["tab_id"] = created["tab"]["tab_id"]
+            pane_id = created["root_pane"]["pane_id"]
             job["pane_id"] = pane_id
         jobs.save(job)
 

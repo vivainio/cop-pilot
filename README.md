@@ -48,8 +48,11 @@ is named `cop-<name-or-dirname>`, falling back to appending the job id if
 that name is taken. `--model` is passed through to `copilot --model <id>`;
 omit it and copilot falls back to whatever's set as the default model in
 `~/.copilot/settings.json` (`"model": "..."`, set via the `/model` slash
-command in an interactive `copilot` session). Every job gets its own tab in
-a dedicated `cop-tasks` workspace.
+command in an interactive `copilot` session). Every job gets its own herdr
+workspace, labeled with its agent name so it's identifiable in the
+workspace list. Add `--worktree` to also run it in a fresh git worktree
+(branch `worktrees/<name>`) instead of `--dir` directly, so it can't
+collide with other work already in that checkout.
 
 `cop collect <job-id> [--wait] [--timeout MS] [--raw]` — without `--wait`,
 non-blocking status check. `--raw` dumps the full pane instead of just the
