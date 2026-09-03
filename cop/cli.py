@@ -177,6 +177,9 @@ def cmd_start(args: argparse.Namespace) -> int:
         job["session_id"] = session_id
         job["session_file"] = str(copilot_output.session_events_path(session_id))
         extra_args = ["--session-id", session_id, *_COPILOT_AUTO_ARGS]
+        if args.model:
+            extra_args += ["--model", args.model]
+            job["model"] = args.model
         herdr.agent_start(job["name"], "copilot", pane_id, extra_args=extra_args)
         # Confirm the prompt actually landed (agent transitioned to "working")
         # instead of firing blind -- a prompt sent moments after agent_start
@@ -447,6 +450,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="mnemonic for the agent name (default: the directory name) -- "
         "makes it easier to spot in `herdr agent list`; the job id is only appended if that "
         "plain name is already in use",
+    )
+    d.add_argument(
+        "--model",
+        default=None,
+        help="model for the Copilot agent to use, passed through as `copilot --model "
+        "<id>` (e.g. gpt-5.6-luna); default is copilot's own default/last-used model",
     )
     d.add_argument(
         "--worktree",
