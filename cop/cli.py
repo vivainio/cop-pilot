@@ -69,6 +69,20 @@ def _require_herdr_env() -> None:
         sys.exit(1)
 
 
+# Non-worktree jobs share one workspace (one tab per job) instead of each
+# getting its own -- a failed/retried job then just leaves a dead tab
+# behind instead of an orphaned standalone workspace in the herdr sidebar.
+_WORKSPACE_LABEL = "cop-tasks"
+
+
+def _ensure_workspace(cwd: str) -> str:
+    for ws in herdr.workspace_list():
+        if ws.get("label") == _WORKSPACE_LABEL:
+            return ws["workspace_id"]
+    created = herdr.workspace_create(label=_WORKSPACE_LABEL, cwd=cwd, no_focus=True)
+    return created["workspace"]["workspace_id"]
+
+
 def _agent_status(state: dict) -> str:
     """herdr agent get/wait/prompt all nest the live fields under "agent"."""
     return state.get("agent", state).get("agent_status", "unknown")
@@ -137,17 +151,17 @@ def cmd_start(args: argparse.Namespace) -> int:
             pane_id = created["root_pane"]["pane_id"]
             job["pane_id"] = pane_id
         else:
-            # Own herdr workspace per job, labeled with the agent's slug --
-            # so it reads as one distinct entry in the workspace list
-            # instead of an anonymous tab buried under a generic shared
-            # workspace label.
             work_dir = directory
-            created = herdr.workspace_create(
-                label=job["name"], cwd=directory, no_focus=True
+            workspace_id = _ensure_workspace(directory)
+            tab = herdr.tab_create(
+                workspace_id=workspace_id,
+                cwd=directory,
+                label=job["name"],
+                no_focus=True,
             )
-            job["workspace_id"] = created["workspace"]["workspace_id"]
-            job["tab_id"] = created["tab"]["tab_id"]
-            pane_id = created["root_pane"]["pane_id"]
+            pane_id = tab["root_pane"]["pane_id"]
+            job["workspace_id"] = workspace_id
+            job["tab_id"] = tab["tab"]["tab_id"]
             job["pane_id"] = pane_id
         jobs.save(job)
 
@@ -164,7 +178,21 @@ def cmd_start(args: argparse.Namespace) -> int:
         if args.model:
             extra_args += ["--model", args.model]
             job["model"] = args.model
-        herdr.agent_start(job["name"], "copilot", pane_id, extra_args=extra_args)
+        # A pane herdr just created can report "agent_pane_busy" / "not an
+        # available shell" for a few seconds if its shell is still settling
+        # (slow rc/profile, prompt plugins, etc.) even though the pane read
+        # looks like a plain ready prompt -- retry with backoff instead of
+        # failing the job outright on that specific, often-transient error.
+        for attempt in range(5):
+            try:
+                herdr.agent_start(
+                    job["name"], "copilot", pane_id, extra_args=extra_args
+                )
+                break
+            except herdr.HerdrError as e:
+                if "agent_pane_busy" not in str(e) or attempt == 4:
+                    raise
+                time.sleep(2 * (attempt + 1))
         # Confirm the prompt actually landed (agent transitioned to "working")
         # instead of firing blind -- a prompt sent moments after agent_start
         # can silently no-op if the TUI isn't fully settled yet. Retry a

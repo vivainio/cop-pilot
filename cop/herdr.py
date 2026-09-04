@@ -53,8 +53,22 @@ def pane_split(*, cwd: str, direction: str = "right", no_focus: bool = True) -> 
     return result["pane"]["pane_id"]
 
 
+def workspace_list() -> list[dict]:
+    return run(["workspace", "list"]).get("workspaces", [])
+
+
 def workspace_create(*, label: str, cwd: str, no_focus: bool = True) -> dict:
     args = ["workspace", "create", "--label", label, "--cwd", cwd]
+    args.append("--no-focus" if no_focus else "--focus")
+    return run(args)
+
+
+def tab_create(
+    *, workspace_id: str, cwd: str, label: str | None = None, no_focus: bool = True
+) -> dict:
+    args = ["tab", "create", "--workspace", workspace_id, "--cwd", cwd]
+    if label:
+        args += ["--label", label]
     args.append("--no-focus" if no_focus else "--focus")
     return run(args)
 
