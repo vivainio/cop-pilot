@@ -22,9 +22,19 @@ logs), pipe it via stdin instead of a shell argument -- `cop start --dir <target
 repo> --name <slug> <<'EOF' ... EOF` -- rather than fighting shell quoting on a huge
 `"<task>"` string. This applies even if you think you already know the answer, or the task
 looks small enough to just do directly — delegating it to Copilot is the point of
-`/cop`, every time. Everything below is reference for the underlying `cop` CLI, used
-both for that handoff and whenever the user asks about `cop`/Copilot delegation
-directly.
+`/cop`, every time.
+
+**Exception: if this task is a continuation of work you already delegated in this
+conversation** (a follow-up, correction, or next step on a job whose id you have,
+still in the same repo/branch), use `cop respond <job-id> "<task>"` on that existing
+job instead of `cop start`. `respond` works on any job, not just `blocked` ones — it
+sends the new instruction into the same still-alive pane, so the agent keeps
+everything it already has in context (repo/branch checked out, files it already
+read, its own prior findings) instead of a fresh agent re-discovering all of that
+from a cold start. Only fall back to `cop start` when there's no existing job to
+continue, or the new task is unrelated to it. Everything below is reference for the
+underlying `cop` CLI, used both for that handoff and whenever the user asks about
+`cop`/Copilot delegation directly.
 
 Don't spend a turn pre-checking the environment first (`which herdr`, `echo
 $HERDR_ENV`, `cop --version`, etc.) -- just run `cop start` directly. It already
@@ -45,8 +55,10 @@ cop collect <job-id> --wait
 # -> blocks until the agent settles, then prints/stores its response
 ```
 
-Other commands: `cop respond <job-id> "<text>"` (answer a prompt that left a job
-`blocked`), `cop show <job-id>`, `cop list`, `cop status`.
+Other commands: `cop respond <job-id> "<text>"` (send a follow-up to an existing
+job's agent -- either to unblock a `blocked` approval prompt, or to continue a
+`done` job with the next step, reusing its already-warmed-up context instead of
+starting a fresh agent), `cop show <job-id>`, `cop list`, `cop status`.
 
 Pass `--worktree` to `start` when the target repo already has other work sitting in it
 (uncommitted changes, another agent running there) — it runs the task in a fresh git
