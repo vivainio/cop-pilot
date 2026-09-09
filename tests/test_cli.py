@@ -9,6 +9,7 @@ from cop import herdr, jobs
 from cop.cli import (
     _agent_name,
     _agent_status,
+    _display_title,
     _humanize_age,
     _result_size,
     cmd_clear,
@@ -50,6 +51,23 @@ def test_agent_name_collision_fallback_stays_within_length_limit() -> None:
     name = _agent_name(hint, "deadbeef", live_names=live)
     assert len(name) <= 32
     assert name.endswith("deadbeef")
+
+
+def test_display_title_uses_first_nonblank_line() -> None:
+    assert _display_title("\n  Add unit tests for src/foo.py  \n\nmore detail") == (
+        "Add unit tests for src/foo.py"
+    )
+
+
+def test_display_title_truncates_long_task() -> None:
+    task = "x" * 100
+    title = _display_title(task)
+    assert len(title) == 60
+    assert title.endswith("…")
+
+
+def test_display_title_empty_task_is_empty_string() -> None:
+    assert _display_title("   \n  ") == ""
 
 
 def test_agent_status_reads_nested_agent_field() -> None:

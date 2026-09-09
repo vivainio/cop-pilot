@@ -42,6 +42,19 @@ _COPILOT_AUTO_ARGS = ["--allow-all-tools", "--no-ask-user"]
 
 _NAME_RE = re.compile(r"[^a-z0-9_-]+")
 _AGENT_PREFIX = "cop"
+_TITLE_MAX = 60
+
+
+def _display_title(task: str) -> str:
+    """Short human-readable task summary for the pane's display-only title
+    metadata -- shown as the agent's headline in herdr's Agents view instead
+    of the shared "cop-tasks" workspace label all non-worktree jobs sit
+    under.
+    """
+    first_line = next((line.strip() for line in task.splitlines() if line.strip()), "")
+    if len(first_line) > _TITLE_MAX:
+        first_line = first_line[: _TITLE_MAX - 1].rstrip() + "…"
+    return first_line
 
 
 def _agent_name(hint: str, job_id: str, live_names: set[str]) -> str:
@@ -165,6 +178,16 @@ def cmd_start(args: argparse.Namespace) -> int:
             job["tab_id"] = tab["tab"]["tab_id"]
             job["pane_id"] = pane_id
         jobs.save(job)
+
+        # Best-effort: give the pane a task-specific display title so it
+        # reads as its own entry in herdr's Agents view instead of just
+        # "cop-tasks" -- display-only, never worth failing the job over.
+        try:
+            herdr.pane_report_metadata(
+                pane_id, source=_AGENT_PREFIX, title=_display_title(task)
+            )
+        except herdr.HerdrError:
+            pass
 
         # Pre-trust the repo so copilot's startup folder-trust dialog never
         # appears, and give it a brand-new session id so it never shows its

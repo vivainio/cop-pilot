@@ -96,6 +96,20 @@ def worktree_create(
     return run(args)
 
 
+def pane_report_metadata(
+    pane_id: str, *, source: str, title: str | None = None
+) -> dict:
+    """Set display-only metadata (e.g. a friendlier title) on a pane, shown
+    in herdr's Agents view without touching the pane/tab/workspace's actual
+    label. `--source`/`--title` must be space-separated -- this CLI command
+    doesn't accept `--flag=value` syntax.
+    """
+    args = ["pane", "report-metadata", pane_id, "--source", source]
+    if title is not None:
+        args += ["--title", title]
+    return run(args)
+
+
 def agent_start(
     name: str,
     kind: str,
