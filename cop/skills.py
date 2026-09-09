@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 from importlib.resources import files
 from pathlib import Path
 
-STALE_CHECK_MARKER = (
-    Path(os.environ.get("COP_HOME") or Path.home() / ".cop") / "skill-check.txt"
-)
+from . import jobs
+
+STALE_CHECK_MARKER = jobs.base_dir() / "skill-check.txt"
 
 
 def _claude_config_dir() -> Path:

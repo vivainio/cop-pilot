@@ -4,15 +4,37 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 
+def _default_base() -> Path:
+    cache_home = os.environ.get("XDG_CACHE_HOME")
+    return (Path(cache_home) if cache_home else Path.home() / ".cache") / "cop-pilot"
+
+
+def _migrate_legacy_jobs(jobs_dir: Path) -> None:
+    """One-time move from the old ~/.cop/jobs location to the new XDG cache
+    dir, so pre-existing job history isn't silently orphaned."""
+    legacy = Path.home() / ".cop" / "jobs"
+    if jobs_dir.exists() or not legacy.exists():
+        return
+    jobs_dir.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(legacy), str(jobs_dir))
+
+
+def base_dir() -> Path:
+    base = os.environ.get("COP_HOME")
+    return Path(base) if base else _default_base()
+
+
 def store_dir() -> Path:
     base = os.environ.get("COP_HOME")
-    d = Path(base) if base else Path.home() / ".cop"
-    jobs = d / "jobs"
+    jobs = base_dir() / "jobs"
+    if base is None:
+        _migrate_legacy_jobs(jobs)
     jobs.mkdir(parents=True, exist_ok=True)
     return jobs
 
@@ -82,3 +104,11 @@ def resolve_id(job_id_prefix: str) -> str:
 def load(job_id_prefix: str) -> dict:
     job_id = resolve_id(job_id_prefix)
     return json.loads(_path(job_id).read_text())
+
+
+def remove(job_id_prefix: str) -> str:
+    """Delete a job's file. Returns the resolved job id. Does not touch
+    any herdr pane/tab/worktree the job may have created."""
+    job_id = resolve_id(job_id_prefix)
+    _path(job_id).unlink()
+    return job_id

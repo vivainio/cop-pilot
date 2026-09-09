@@ -60,8 +60,15 @@ with `--worktree`) picks what that new branch starts from, instead of
 non-blocking status check. `--raw` dumps the full pane instead of just the
 last turn.
 
-Every command accepts `--json`. Jobs are flat JSON files under `~/.cop/jobs`
-(override with `COP_HOME`).
+Every command accepts `--json`. Jobs are flat JSON files under
+`~/.cache/cop-pilot/jobs` (override the whole base dir with `COP_HOME`, or
+just the cache root with `XDG_CACHE_HOME`).
+
+`cop clear [job-id ...] [--status STATUS] [--all]` — delete job records.
+With no arguments, clears only `done` jobs. `--status` (repeatable) picks
+specific statuses instead; `--all` clears regardless of status; passing
+explicit job ids/prefixes deletes just those, any status. Doesn't touch any
+herdr pane/tab/worktree the job created.
 
 ## Claude Code skill
 

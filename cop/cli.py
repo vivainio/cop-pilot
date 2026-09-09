@@ -9,7 +9,8 @@ Typical flow:
     cop collect <job-id> --wait
     # -> blocks until the agent settles, then prints/stores its response
 
-State lives in flat JSON files under ~/.cop/jobs (override with COP_HOME).
+State lives in flat JSON files under ~/.cache/cop-pilot/jobs (override with
+COP_HOME or XDG_CACHE_HOME).
 This process must run inside a Herdr-managed pane (HERDR_ENV=1) since it
 drives the herdr CLI directly.
 """
@@ -403,6 +404,47 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+_DEFAULT_CLEAR_STATUSES = {"done"}
+
+
+def cmd_clear(args: argparse.Namespace) -> int:
+    """Delete job records. Only touches the local job-store files -- any
+    herdr pane/tab/worktree the job created is left alone."""
+    if args.job_ids:
+        targets = []
+        for prefix in args.job_ids:
+            try:
+                targets.append(jobs.resolve_id(prefix))
+            except KeyError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+    else:
+        statuses = (
+            set(args.status)
+            if args.status
+            else (None if args.all else _DEFAULT_CLEAR_STATUSES)
+        )
+        targets = [
+            job["id"]
+            for job in jobs.list_jobs()
+            if statuses is None or job["status"] in statuses
+        ]
+
+    if not targets:
+        print("no matching jobs to clear")
+        return 0
+
+    for job_id in targets:
+        jobs.remove(job_id)
+
+    _emit(
+        {"cleared": targets},
+        as_json=args.json,
+        text=f"cleared {len(targets)} job(s): {', '.join(targets)}",
+    )
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     """Like `list`, but refreshes every non-terminal job's live agent status first."""
     _require_herdr_env()
@@ -537,6 +579,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     st.add_argument("--json", action="store_true")
     st.set_defaults(func=cmd_status)
+
+    cl = sub.add_parser(
+        "clear",
+        help="delete job records (default: only 'done' jobs); "
+        "doesn't touch any herdr pane/tab/worktree",
+    )
+    cl.add_argument(
+        "job_ids",
+        nargs="*",
+        help="specific job id(s)/prefixes to delete, regardless of status; "
+        "if omitted, --status/--all pick which jobs to clear instead",
+    )
+    cl.add_argument(
+        "--status",
+        action="append",
+        default=None,
+        help="only clear jobs with this status (repeatable); default: done. "
+        "Ignored if job_ids are given.",
+    )
+    cl.add_argument(
+        "--all",
+        action="store_true",
+        help="clear jobs regardless of status; ignored if job_ids or --status are given",
+    )
+    cl.add_argument("--json", action="store_true")
+    cl.set_defaults(func=cmd_clear)
 
     isk = sub.add_parser(
         "install-skills",

@@ -3,8 +3,17 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import NoReturn
 
+import pytest
+
 from cop import herdr, jobs
-from cop.cli import _agent_name, _agent_status, _humanize_age, _result_size, cmd_collect
+from cop.cli import (
+    _agent_name,
+    _agent_status,
+    _humanize_age,
+    _result_size,
+    cmd_clear,
+    cmd_collect,
+)
 
 
 def test_agent_name_uses_hint_when_available() -> None:
@@ -195,3 +204,72 @@ def test_collect_prefers_session_file_over_pane_scrape(monkeypatch, tmp_path) ->
 
     assert rc == 0
     assert jobs.load(job["id"])["result"] == "clean answer from session file"
+
+
+def _make_job(status: str, task: str = "t") -> dict:
+    job = jobs.new_job(task=task, directory="/r", kind="copilot")
+    job["status"] = status
+    jobs.save(job)
+    return job
+
+
+def test_clear_defaults_to_done_jobs_only() -> None:
+    done = _make_job("done")
+    working = _make_job("working")
+
+    rc = cmd_clear(argparse.Namespace(job_ids=[], status=None, all=False, json=False))
+
+    assert rc == 0
+    with pytest.raises(KeyError):
+        jobs.load(done["id"])
+    assert jobs.load(working["id"])["status"] == "working"
+
+
+def test_clear_with_status_filters_to_those_statuses() -> None:
+    error = _make_job("error")
+    done = _make_job("done")
+
+    rc = cmd_clear(
+        argparse.Namespace(job_ids=[], status=["error"], all=False, json=False)
+    )
+
+    assert rc == 0
+    with pytest.raises(KeyError):
+        jobs.load(error["id"])
+    assert jobs.load(done["id"])["status"] == "done"
+
+
+def test_clear_all_ignores_status() -> None:
+    done = _make_job("done")
+    working = _make_job("working")
+
+    rc = cmd_clear(argparse.Namespace(job_ids=[], status=None, all=True, json=False))
+
+    assert rc == 0
+    with pytest.raises(KeyError):
+        jobs.load(done["id"])
+    with pytest.raises(KeyError):
+        jobs.load(working["id"])
+
+
+def test_clear_specific_job_ids_ignores_status() -> None:
+    working = _make_job("working")
+    other_done = _make_job("done")
+
+    rc = cmd_clear(
+        argparse.Namespace(job_ids=[working["id"]], status=None, all=False, json=False)
+    )
+
+    assert rc == 0
+    with pytest.raises(KeyError):
+        jobs.load(working["id"])
+    assert jobs.load(other_done["id"])["status"] == "done"
+
+
+def test_clear_no_matching_jobs_is_a_noop(capsys) -> None:
+    _make_job("working")
+
+    rc = cmd_clear(argparse.Namespace(job_ids=[], status=None, all=False, json=False))
+
+    assert rc == 0
+    assert "no matching jobs" in capsys.readouterr().out

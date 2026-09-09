@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from cop import jobs
@@ -70,3 +72,70 @@ def test_resolve_id_ambiguous_raises() -> None:
 
     with pytest.raises(KeyError, match="ambiguous"):
         jobs.resolve_id("abc")
+
+
+def test_remove_deletes_job_and_returns_resolved_id() -> None:
+    job = jobs.new_job(task="t", directory="/r", kind="copilot")
+    prefix = job["id"][:4]
+
+    assert jobs.remove(prefix) == job["id"]
+    with pytest.raises(KeyError, match="no job matches"):
+        jobs.load(job["id"])
+
+
+def test_remove_unknown_raises() -> None:
+    with pytest.raises(KeyError, match="no job matches"):
+        jobs.remove("nonexistent")
+
+
+def test_base_dir_uses_xdg_cache_home(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("COP_HOME", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+    assert jobs.base_dir() == tmp_path / "cache" / "cop-pilot"
+
+
+def test_base_dir_falls_back_to_home_cache(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("COP_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    assert jobs.base_dir() == tmp_path / ".cache" / "cop-pilot"
+
+
+def test_store_dir_migrates_legacy_cop_jobs(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("COP_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    legacy = tmp_path / ".cop" / "jobs"
+    legacy.mkdir(parents=True)
+    (legacy / "abc12345.json").write_text('{"id": "abc12345"}')
+
+    result = jobs.store_dir()
+
+    assert result == tmp_path / ".cache" / "cop-pilot" / "jobs"
+    assert (result / "abc12345.json").exists()
+    assert not legacy.exists()
+
+
+def test_store_dir_skips_migration_when_cache_jobs_already_exist(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv("COP_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    legacy = tmp_path / ".cop" / "jobs"
+    legacy.mkdir(parents=True)
+    (legacy / "old.json").write_text('{"id": "old"}')
+
+    new_jobs_dir = tmp_path / ".cache" / "cop-pilot" / "jobs"
+    new_jobs_dir.mkdir(parents=True)
+    (new_jobs_dir / "new.json").write_text('{"id": "new"}')
+
+    result = jobs.store_dir()
+
+    assert (result / "new.json").exists()
+    assert not (result / "old.json").exists()
+    assert legacy.exists()  # left untouched, not merged
