@@ -126,7 +126,7 @@ def test_collect_fetches_result_even_if_status_already_marked_done(monkeypatch) 
     without ever fetching a result. `collect` must not mistake that for
     already-collected and skip the fetch.
     """
-    monkeypatch.setenv("HERDR_ENV", "1")
+    monkeypatch.setattr(cli, "_require_herdr", lambda: None)
     job = jobs.new_job(task="t", directory="/r", kind="copilot")
     job["status"] = "done"
     jobs.save(job)
@@ -152,7 +152,7 @@ def test_collect_fetches_result_even_if_status_already_marked_done(monkeypatch) 
 
 
 def test_collect_skips_refetch_once_result_is_stored(monkeypatch) -> None:
-    monkeypatch.setenv("HERDR_ENV", "1")
+    monkeypatch.setattr(cli, "_require_herdr", lambda: None)
     job = jobs.new_job(task="t", directory="/r", kind="copilot")
     job["status"] = "done"
     job["result"] = "already have this"
@@ -180,7 +180,7 @@ def test_collect_skips_refetch_once_result_is_stored(monkeypatch) -> None:
 
 
 def test_collect_prefers_session_file_over_pane_scrape(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("HERDR_ENV", "1")
+    monkeypatch.setattr(cli, "_require_herdr", lambda: None)
     session_file = tmp_path / "events.jsonl"
     session_file.write_text(
         json.dumps(
