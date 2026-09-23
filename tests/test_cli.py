@@ -5,7 +5,7 @@ from typing import NoReturn
 
 import pytest
 
-from cop import herdr, jobs
+from cop import cli, herdr, jobs
 from cop.cli import (
     _agent_name,
     _agent_status,
