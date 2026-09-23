@@ -11,23 +11,31 @@ Typical flow:
 
 State lives in flat JSON files under ~/.cache/cop-pilot/jobs (override with
 COP_HOME or XDG_CACHE_HOME).
-This process must run inside a Herdr-managed pane (HERDR_ENV=1) since it
-drives the herdr CLI directly.
+herdr must be installed and running (cop drives its CLI); cop itself does not
+need to run inside a herdr pane.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
+import shutil
 import sys
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import copilot_output, copilot_trust, herdr, jobs
+from . import (
+    codex_output,
+    codex_trust,
+    config,
+    copilot_output,
+    copilot_trust,
+    herdr,
+    jobs,
+)
 from .skills import check_skill_staleness, install_skills_command
 
 # Herdr agent lifecycle states -> job status. "unknown" and "working" pass through as-is.
@@ -39,6 +47,13 @@ _SETTLED = {"idle", "done"}
 # prompt-mode (-p) only -- it refuses to start in the persistent interactive
 # session herdr needs for lifecycle tracking, so it can't be used here.)
 _COPILOT_AUTO_ARGS = ["--allow-all-tools", "--no-ask-user"]
+
+# `codex` unattended, but still sandboxed to the workspace: never pause for
+# approval (failures go back to the model instead), writes limited to the
+# working dir. Deliberately not --dangerously-bypass-approvals-and-sandbox.
+_CODEX_AUTO_ARGS = ["-a", "never", "-s", "workspace-write"]
+
+_AGENTS = config.AGENTS
 
 _NAME_RE = re.compile(r"[^a-z0-9_-]+")
 _AGENT_PREFIX = "cop"
@@ -74,10 +89,17 @@ def _agent_name(hint: str, job_id: str, live_names: set[str]) -> str:
     return "-".join(p for p in (_AGENT_PREFIX, base, job_id) if p)
 
 
-def _require_herdr_env() -> None:
-    if os.environ.get("HERDR_ENV") != "1":
+def _require_herdr() -> None:
+    """herdr must be installed and its server running; cop need not itself be
+    inside a herdr pane -- it only drives the herdr CLI."""
+    if shutil.which("herdr") is None:
+        print("error: `herdr` not found on PATH", file=sys.stderr)
+        sys.exit(1)
+    try:
+        herdr.workspace_list()
+    except herdr.HerdrError as e:
         print(
-            "error: cop must run inside a Herdr-managed pane (HERDR_ENV=1 not set)",
+            f"error: herdr server not reachable (is herdr running?): {e}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -105,9 +127,19 @@ def _agent_status(state: dict) -> str:
 def _read_result(job: dict, target: str, *, lines: int, raw: bool) -> str:
     if raw:
         return herdr.agent_read(target, lines=lines)
+    if job["kind"] == "codex" and not job.get("session_file"):
+        # Codex has no --session-id, so locate its rollout file after the fact.
+        found = codex_output.find_session(
+            job.get("worktree_path") or job["dir"], job["created_at"]
+        )
+        if found:
+            job["session_file"] = str(found)
     session_file = job.get("session_file")
     if session_file:
-        answer = copilot_output.extract_final_answer(Path(session_file))
+        extract = (
+            codex_output if job["kind"] == "codex" else copilot_output
+        ).extract_final_answer
+        answer = extract(Path(session_file))
         if answer is not None:
             return answer
     # Session file missing/unparseable/no final answer yet (e.g. blocked
@@ -125,7 +157,7 @@ def _emit(data: dict, *, as_json: bool, text: str) -> None:
 
 
 def cmd_start(args: argparse.Namespace) -> int:
-    _require_herdr_env()
+    _require_herdr()
     task = args.task
     if task is None:
         if sys.stdin.isatty():
@@ -139,8 +171,14 @@ def cmd_start(args: argparse.Namespace) -> int:
             print("error: empty task from stdin", file=sys.stderr)
             return 2
 
+    try:
+        args.agent = config.resolve_agent(args.agent)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+
     directory = str(Path(args.dir).expanduser().resolve())
-    job = jobs.new_job(task=task, directory=directory, kind="copilot")
+    job = jobs.new_job(task=task, directory=directory, kind=args.agent)
     live_names = {a["name"] for a in herdr.agent_list() if a.get("name")}
     job["name"] = _agent_name(args.name or Path(directory).name, job["id"], live_names)
     job["worktree_path"] = None
@@ -189,18 +227,23 @@ def cmd_start(args: argparse.Namespace) -> int:
         except herdr.HerdrError:
             pass
 
-        # Pre-trust the repo so copilot's startup folder-trust dialog never
-        # appears, and give it a brand-new session id so it never shows its
-        # "restore interrupted sessions" picker either -- herdr can't tell
-        # either of those modals apart from a settled, ready-for-input
-        # screen, so a prompt sent into one silently goes nowhere.
-        copilot_trust.trust(work_dir)
-        session_id = str(uuid.uuid4())
-        job["session_id"] = session_id
-        job["session_file"] = str(copilot_output.session_events_path(session_id))
-        extra_args = ["--session-id", session_id, *_COPILOT_AUTO_ARGS]
+        # Pre-trust the repo so the agent's startup folder-trust dialog never
+        # appears (herdr can't tell it apart from a settled, ready-for-input
+        # screen, so a prompt sent into it silently goes nowhere). Copilot
+        # also gets a brand-new session id so its "restore interrupted
+        # sessions" picker never shows either; codex has no such flag, its
+        # session file is located at collect time instead.
+        if args.agent == "codex":
+            codex_trust.trust(work_dir)
+            extra_args = list(_CODEX_AUTO_ARGS)
+        else:
+            copilot_trust.trust(work_dir)
+            session_id = str(uuid.uuid4())
+            job["session_id"] = session_id
+            job["session_file"] = str(copilot_output.session_events_path(session_id))
+            extra_args = ["--session-id", session_id, *_COPILOT_AUTO_ARGS]
         if args.model:
-            extra_args += ["--model", args.model]
+            extra_args += ["--model" if args.agent == "copilot" else "-m", args.model]
             job["model"] = args.model
         # A pane herdr just created can report "agent_pane_busy" / "not an
         # available shell" for a few seconds if its shell is still settling
@@ -210,7 +253,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         for attempt in range(5):
             try:
                 herdr.agent_start(
-                    job["name"], "copilot", pane_id, extra_args=extra_args
+                    job["name"], args.agent, pane_id, extra_args=extra_args
                 )
                 break
             except herdr.HerdrError as e:
@@ -268,8 +311,14 @@ def cmd_start(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_init(args: argparse.Namespace) -> int:
+    config.set_agent(args.agent)
+    print(f"default agent set to {args.agent}")
+    return 0
+
+
 def cmd_collect(args: argparse.Namespace) -> int:
-    _require_herdr_env()
+    _require_herdr()
     try:
         job = jobs.load(args.job_id)
     except KeyError as e:
@@ -320,7 +369,7 @@ def cmd_collect(args: argparse.Namespace) -> int:
 
 
 def cmd_respond(args: argparse.Namespace) -> int:
-    _require_herdr_env()
+    _require_herdr()
     try:
         job = jobs.load(args.job_id)
     except KeyError as e:
@@ -361,7 +410,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     if args.refresh:
-        _require_herdr_env()
+        _require_herdr()
         try:
             state = herdr.agent_get(job["name"])
             job["status"] = _agent_status(state)
@@ -470,7 +519,7 @@ def cmd_clear(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     """Like `list`, but refreshes every non-terminal job's live agent status first."""
-    _require_herdr_env()
+    _require_herdr()
     all_jobs = []
     for job in jobs.list_jobs():
         if job["status"] not in ("done", "error"):
@@ -511,12 +560,21 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="command", required=True)
 
-    d = sub.add_parser("start", help="hand a task to a fresh Copilot agent pane")
+    d = sub.add_parser(
+        "start", help="hand a task to a fresh Copilot or Codex agent pane"
+    )
     d.add_argument(
         "task",
         nargs="?",
         default=None,
         help="the task/prompt to send (reads stdin if omitted)",
+    )
+    d.add_argument(
+        "--agent",
+        choices=_AGENTS,
+        default=None,
+        help="which CLI agent to delegate to (default: `cop init` setting, or "
+        "the only one installed)",
     )
     d.add_argument(
         "--dir", default=".", help="working directory for the new pane (default: cwd)"
@@ -531,8 +589,8 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument(
         "--model",
         default=None,
-        help="model for the Copilot agent to use, passed through as `copilot --model "
-        "<id>` (e.g. gpt-5.6-luna); default is copilot's own default/last-used model",
+        help="model for the agent to use, passed through as `copilot --model <id>` or "
+        "`codex -m <id>` (e.g. gpt-5.6-luna); default is the agent's own default",
     )
     d.add_argument(
         "--worktree",
@@ -553,6 +611,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     d.add_argument("--json", action="store_true")
     d.set_defaults(func=cmd_start)
+
+    i = sub.add_parser("init", help="set the default agent for `cop start`")
+    i.add_argument("--agent", choices=_AGENTS, required=True)
+    i.set_defaults(func=cmd_init)
 
     c = sub.add_parser("collect", help="check on / fetch the result of a delegated job")
     c.add_argument("job_id")

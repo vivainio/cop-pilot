@@ -291,3 +291,25 @@ def test_clear_no_matching_jobs_is_a_noop(capsys) -> None:
 
     assert rc == 0
     assert "no matching jobs" in capsys.readouterr().out
+
+
+def test_resolve_agent_single_installed(monkeypatch) -> None:
+    from cop import config
+
+    monkeypatch.setattr(
+        config.shutil, "which", lambda n: "/x/codex" if n == "codex" else None
+    )
+    assert config.resolve_agent() == "codex"
+
+
+def test_resolve_agent_both_needs_init(monkeypatch) -> None:
+    import pytest
+
+    from cop import config
+
+    monkeypatch.setattr(config.shutil, "which", lambda n: f"/x/{n}")
+    with pytest.raises(ValueError, match="cop init --agent"):
+        config.resolve_agent()
+    config.set_agent("codex")
+    assert config.resolve_agent() == "codex"
+    assert config.resolve_agent("copilot") == "copilot"

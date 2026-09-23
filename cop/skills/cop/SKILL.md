@@ -1,7 +1,7 @@
 ---
 name: cop
 description: Delegate a coding task to a GitHub Copilot CLI agent running in a Herdr pane, and collect the result asynchronously, using the cop CLI. Use when the user asks to hand off/delegate a task to Copilot, run something in the background via Copilot, or mentions "cop start", "cop collect", or delegating work to a Copilot agent.
-updated: 2026-09-02
+updated: 2026-09-23
 ---
 
 # cop - delegate tasks to GitHub Copilot CLI agents
@@ -36,14 +36,14 @@ continue, or the new task is unrelated to it. Everything below is reference for 
 underlying `cop` CLI, used both for that handoff and whenever the user asks about
 `cop`/Copilot delegation directly.
 
-Don't spend a turn pre-checking the environment first (`which herdr`, `echo
-$HERDR_ENV`, `cop --version`, etc.) -- just run `cop start` directly. It already
-fails fast with a clear error if `HERDR_ENV`/`herdr`/`copilot` aren't set up, so a
+Don't spend a turn pre-checking the environment first (`which herdr`,
+`cop --version`, etc.) -- just run `cop start` directly. It already
+fails fast with a clear error if `herdr`/the agent CLI aren't set up, so a
 separate check only adds latency without changing what you'd do next.
 
 Hands a task to a fresh `copilot` agent in its own Herdr pane and lets you collect the
-result later instead of blocking. Requires running inside a Herdr-managed pane
-(`HERDR_ENV=1`), with `herdr` and `copilot` on `PATH`. Run `cop <command> --help` for
+result later instead of blocking. Requires a running `herdr` and `copilot` (or `codex`) on `PATH`; the
+default agent is set with `cop init --agent <name>` when both are installed. Run `cop <command> --help` for
 full flags; `--json` works on every command. Full docs:
 https://github.com/vivainio/cop-pilot
 

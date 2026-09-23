@@ -20,8 +20,13 @@ uv tool install cop-pilot
 # or: uv tool install git+https://github.com/vivainio/cop-pilot
 ```
 
-Requires: running inside a Herdr-managed pane (`HERDR_ENV=1`); `herdr` and
-`copilot` on `PATH`.
+Requires: `herdr` installed and running (cop need not itself run inside a
+herdr pane), plus `copilot` and/or `codex` on `PATH`.
+
+Which agent to use: if only one of `copilot`/`codex` is installed, it's used
+automatically. If both are, pick a default once with `cop init --agent codex`
+(or pass `--agent` per job). Codex jobs run with `-a never -s workspace-write`
+(no approval prompts, sandboxed to the working directory).
 
 ## Usage
 
@@ -45,7 +50,7 @@ cop status                 # all known jobs, refreshed from herdr
 
 `cop start [<task>] --dir <path> [--name <mnemonic>] [--model <id>]` — agent
 is named `cop-<name-or-dirname>`, falling back to appending the job id if
-that name is taken. `--model` is passed through to `copilot --model <id>`;
+that name is taken. `--agent copilot|codex` overrides the default agent. `--model` is passed through to `copilot --model <id>` (`codex -m <id>` for Codex);
 omit it and copilot falls back to whatever's set as the default model in
 `~/.copilot/settings.json` (`"model": "..."`, set via the `/model` slash
 command in an interactive `copilot` session). Every job gets its own herdr
